@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 const featureNames = [
@@ -17,6 +18,9 @@ const featureNames = [
   "Infertility"
 ];
 
+// Define which fields are boolean
+const booleanFields = ["Hormone_Level_Abnormality", "Menstrual_Irregularity", "Infertility"];
+
 interface FeatureGuide {
   name: string;
   description: string;
@@ -24,6 +28,7 @@ interface FeatureGuide {
   max: number;
   step: number;
   unit?: string;
+  isBoolean?: boolean;
 }
 
 const featureGuides: FeatureGuide[] = [
@@ -52,31 +57,37 @@ const featureGuides: FeatureGuide[] = [
   },
   {
     name: "Hormone_Level_Abnormality",
-    description: "Hormone abnormality level (0 for normal, higher values for more severe)",
+    description: "Do you have hormone level abnormalities?",
     min: 0,
-    max: 5,
-    step: 1
+    max: 1,
+    step: 1,
+    isBoolean: true
   },
   {
     name: "Menstrual_Irregularity",
-    description: "Menstrual irregularity level (0 for regular, higher values for more irregular)",
+    description: "Do you experience menstrual irregularity?",
     min: 0,
-    max: 5,
-    step: 1
+    max: 1,
+    step: 1,
+    isBoolean: true
   },
   {
     name: "Infertility",
-    description: "Experienced fertility issues (0 for no issues, 1 for minor issues, 2+ for significant issues)",
+    description: "Have you experienced fertility issues?",
     min: 0,
-    max: 3,
-    step: 1
+    max: 1,
+    step: 1,
+    isBoolean: true
   }
 ];
 
 const Predict: React.FC = () => {
   const [inputs, setInputs] = useState<string[]>(Array(featureNames.length).fill(""));
   const [sliderValues, setSliderValues] = useState<number[]>(
-    featureGuides.map(guide => (guide.min + guide.max) / 2)
+    featureGuides.map(guide => guide.isBoolean ? 0 : (guide.min + guide.max) / 2)
+  );
+  const [booleanValues, setBooleanValues] = useState<boolean[]>(
+    featureGuides.map(guide => guide.isBoolean ? false : false)
   );
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [result, setResult] = useState<number | null>(null);
@@ -86,8 +97,8 @@ const Predict: React.FC = () => {
     newInputs[index] = value;
     setInputs(newInputs);
     
-    // Update slider if valid number
-    if (!isNaN(Number(value))) {
+    // Update slider if valid number and not a boolean field
+    if (!featureGuides[index].isBoolean && !isNaN(Number(value))) {
       const newSliderValues = [...sliderValues];
       newSliderValues[index] = Number(value);
       setSliderValues(newSliderValues);
@@ -102,6 +113,20 @@ const Predict: React.FC = () => {
     const newInputs = [...inputs];
     newInputs[index] = String(value[0]);
     setInputs(newInputs);
+  };
+  
+  const handleBooleanChange = (index: number, checked: boolean) => {
+    const newBooleanValues = [...booleanValues];
+    newBooleanValues[index] = checked;
+    setBooleanValues(newBooleanValues);
+    
+    const newInputs = [...inputs];
+    newInputs[index] = checked ? "1" : "0";
+    setInputs(newInputs);
+    
+    const newSliderValues = [...sliderValues];
+    newSliderValues[index] = checked ? 1 : 0;
+    setSliderValues(newSliderValues);
   };
   
   const handleSubmit = async () => {
@@ -139,12 +164,16 @@ const Predict: React.FC = () => {
   
   const resetForm = () => {
     setInputs(Array(featureNames.length).fill(""));
-    setSliderValues(featureGuides.map(guide => (guide.min + guide.max) / 2));
+    setSliderValues(featureGuides.map(guide => guide.isBoolean ? 0 : (guide.min + guide.max) / 2));
+    setBooleanValues(featureGuides.map(() => false));
     setResult(null);
   };
   
   const formatValue = (index: number, value: string | number): string => {
     const guide = featureGuides[index];
+    if (guide.isBoolean) {
+      return Number(value) === 1 ? "Yes" : "No";
+    }
     if (guide.unit) {
       return `${value} ${guide.unit}`;
     }
@@ -178,34 +207,52 @@ const Predict: React.FC = () => {
                   <p className="text-sm text-muted-foreground mb-3">
                     {guide.description}
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_160px] gap-4 items-center">
-                    <div className="space-y-2">
-                      <Slider
-                        value={[sliderValues[idx]]}
+                  
+                  {guide.isBoolean ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">No</span>
+                      <Switch
+                        id={`feature-${idx}`}
+                        checked={booleanValues[idx]}
+                        onCheckedChange={(checked) => handleBooleanChange(idx, checked)}
+                      />
+                      <span className="text-sm">Yes</span>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_160px] gap-4 items-center">
+                      <div className="space-y-2">
+                        <Slider
+                          value={[sliderValues[idx]]}
+                          min={guide.min}
+                          max={guide.max}
+                          step={guide.step}
+                          onValueChange={(value) => handleSliderChange(idx, value)}
+                          className="py-4"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>{guide.min}</span>
+                          <span>{guide.max}</span>
+                        </div>
+                      </div>
+                      <Input
+                        id={`feature-${idx}`}
+                        type="number"
                         min={guide.min}
                         max={guide.max}
                         step={guide.step}
-                        onValueChange={(value) => handleSliderChange(idx, value)}
-                        className="py-4"
+                        value={inputs[idx]}
+                        onChange={(e) => handleChange(idx, e.target.value)}
+                        className="text-right"
                       />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{guide.min}</span>
-                        <span>{guide.max}</span>
-                      </div>
                     </div>
-                    <Input
-                      id={`feature-${idx}`}
-                      type="number"
-                      min={guide.min}
-                      max={guide.max}
-                      step={guide.step}
-                      value={inputs[idx]}
-                      onChange={(e) => handleChange(idx, e.target.value)}
-                      className="text-right"
-                    />
-                  </div>
+                  )}
+                  
                   <div className="mt-1 text-right text-sm">
-                    Current value: <span className="font-medium">{formatValue(idx, sliderValues[idx] || guide.min)}</span>
+                    Current value: <span className="font-medium">
+                      {guide.isBoolean 
+                        ? (booleanValues[idx] ? "Yes" : "No") 
+                        : formatValue(idx, sliderValues[idx] || guide.min)}
+                    </span>
                   </div>
                 </div>
               ))}
